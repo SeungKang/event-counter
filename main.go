@@ -17,7 +17,21 @@ import (
 )
 
 var (
-	keyCount = 0
+	keyCount               = 0
+	steamChapterPointer    = []uint32{0x01BF8B20, 0x3cc}
+	steamCheckpointPointer = []uint32{0x01C55EA8, 0x74, 0x0, 0x3c}
+
+	originChapterPointer    = []uint32{0x01C11BE0, 0x3cc}
+	originCheckpointPointer = []uint32{0x01C6EFE0, 0x134, 0xBC, 0x0, 0x3c}
+
+	reloadedChapterPointer    = []uint32{0x01C6EFE0, 0x170, 0x1dc, 0x1e8, 0x3c, 0x528, 0x3cc}
+	reloadedCheckpointPointer = []uint32{0x01C6EFE0, 0x134, 0xbc, 0x0, 0x3c}
+
+	gogChapterPointer    = []uint32{0x01C6EFE0, 0x1dc, 0x128, 0x1b8, 0x3c, 0x528, 0x3cc}
+	gogCheckpointPointer = []uint32{0x01C6EFE0, 0x170, 0xbc, 0x0, 0x3c}
+
+	activeChapterPointer    = steamChapterPointer
+	activeCheckpointPointer = steamCheckpointPointer
 )
 
 func main() {
@@ -104,7 +118,7 @@ func createGUI() (guiWindow, error) {
 
 	window := wui.NewWindow()
 	window.SetFont(windowFont)
-	window.SetInnerSize(300, 120)
+	window.SetInnerSize(350, 210)
 	window.SetTitle("Medge Key Counter")
 	window.SetResizable(true)
 	window.SetHasBorder(true)
@@ -113,7 +127,7 @@ func createGUI() (guiWindow, error) {
 	})
 
 	keyCountFont, _ := wui.NewFont(wui.FontDesc{
-		Name:   "Roboto",
+		Name:   "Inter",
 		Height: 100,
 		Bold:   true,
 	})
@@ -124,9 +138,61 @@ func createGUI() (guiWindow, error) {
 	keyCountLabel.SetText(strconv.Itoa(keyCount))
 	window.Add(keyCountLabel)
 
+	buttonFont, _ := wui.NewFont(wui.FontDesc{
+		Name:   "Inter",
+		Height: 20,
+		Bold:   true,
+	})
+
+	steamButton := wui.NewButton()
+	steamButton.SetFont(buttonFont)
+	steamButton.SetBounds(20, 120, 100, 30)
+	steamButton.SetText("steam")
+	steamButton.SetOnClick(func() {
+		activeChapterPointer = steamChapterPointer
+		activeCheckpointPointer = steamCheckpointPointer
+	})
+	window.Add(steamButton)
+
+	originButton := wui.NewButton()
+	originButton.SetFont(buttonFont)
+	originButton.SetBounds(125, 120, 100, 30)
+	originButton.SetText("origin")
+	originButton.SetOnClick(func() {
+		activeChapterPointer = originChapterPointer
+		activeCheckpointPointer = originCheckpointPointer
+	})
+	window.Add(originButton)
+
+	reloadedButton := wui.NewButton()
+	reloadedButton.SetFont(buttonFont)
+	reloadedButton.SetBounds(20, 160, 100, 30)
+	reloadedButton.SetText("reloaded")
+	reloadedButton.SetOnClick(func() {
+		activeChapterPointer = reloadedChapterPointer
+		activeCheckpointPointer = reloadedCheckpointPointer
+		log.Println("version set to reloaded")
+	})
+	window.Add(reloadedButton)
+
+	gogButton := wui.NewButton()
+	gogButton.SetFont(buttonFont)
+	gogButton.SetBounds(125, 160, 100, 30)
+	gogButton.SetText("gog")
+	gogButton.SetOnClick(func() {
+		activeChapterPointer = gogChapterPointer
+		activeCheckpointPointer = gogCheckpointPointer
+		log.Println("version set to gog")
+	})
+	window.Add(gogButton)
+
 	gui := guiWindow{
 		window:   window,
 		keyCount: keyCountLabel,
+		steam:    steamButton,
+		origin:   originButton,
+		reloaded: reloadedButton,
+		gog:      gogButton,
 		done:     done,
 	}
 
@@ -171,10 +237,8 @@ func scanMedgeLoopWithError(gui guiWindow) error {
 	if err != nil {
 		return errors.New("failed to find process")
 	}
-	log.Println("TODO: found the Mirrors Edge process")
 
 	var lastCheckpoint string
-
 	for {
 		time.Sleep(50 * time.Millisecond)
 
@@ -191,7 +255,7 @@ func scanMedgeLoopWithError(gui guiWindow) error {
 		}
 
 		// get current chapter
-		chapterAddr, err := getAddr(proc, 0x1FF8B20, 0x3CC)
+		chapterAddr, err := lookupAddr(proc, activeChapterPointer[0]+0x400000, activeChapterPointer[1:]...)
 		if err != nil {
 			log.Printf("failed to get current chapter address - %s", err)
 			continue
@@ -208,7 +272,7 @@ func scanMedgeLoopWithError(gui guiWindow) error {
 		}
 
 		// get current checkpoint
-		checkpointAddr, err := getAddr(proc, 0x2055EA8, 0x74, 0x0, 0x3C)
+		checkpointAddr, err := lookupAddr(proc, activeCheckpointPointer[0]+0x400000, activeCheckpointPointer[1:]...)
 		if err != nil {
 			log.Println(err)
 			continue
@@ -238,7 +302,7 @@ func scanMedgeLoopWithError(gui guiWindow) error {
 	}
 }
 
-func getAddr(proc kiwi.Process, start uint32, offsets ...uint32) (uint32, error) {
+func lookupAddr(proc kiwi.Process, start uint32, offsets ...uint32) (uint32, error) {
 	stringAddr, err := proc.ReadUint32(uintptr(start))
 	if err != nil {
 		return 0, fmt.Errorf("error while trying to read from target process at 0x%x - %w", stringAddr, err)
@@ -286,5 +350,9 @@ func findStringAtAddr(proc kiwi.Process, initialAddr uint32) (string, error) {
 type guiWindow struct {
 	window   *wui.Window
 	keyCount *wui.Label
+	steam    *wui.Button
+	origin   *wui.Button
+	reloaded *wui.Button
+	gog      *wui.Button
 	done     chan struct{}
 }
