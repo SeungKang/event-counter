@@ -72,6 +72,12 @@ func startKeyboardListener(user32 *user32util.User32DLL, pressedKeys map[uint32]
 			}
 		}
 
+		// reset count with f12
+		if event.Struct.VkCode == 123 {
+			keyCount = 0
+			gui.keyCount.SetText(strconv.Itoa(keyCount))
+		}
+
 		if event.KeyboardButtonAction() == user32util.WMKeyUp {
 			_, hasIt := pressedKeys[event.Struct.VkCode]
 			if hasIt {
@@ -129,6 +135,7 @@ func createGUI() (guiWindow, error) {
 
 func startMouseListener(dll *user32util.User32DLL, gui guiWindow) (*user32util.LowLevelMouseEventListener, error) {
 	listener, err := user32util.NewLowLevelMouseListener(func(event user32util.LowLevelMouseEvent) {
+		// ignore mouse move and mouse button up events
 		action := user32util.MouseButtonAction(event.WParam)
 		if action == user32util.WMMouseMove ||
 			action == user32util.WMLButtonUp ||
