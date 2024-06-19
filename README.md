@@ -1,8 +1,8 @@
 # event-counter
 
 Tracks key presses and mouse inputs, displaying the count in a minimal UI.
-The count resets upon starting a new game in the Steam version of Mirror's Edge
-or with the F12 key.
+Once the game version is selected, the count resets upon starting
+a new game or with the F12 key.
 
 ## Requirements
 
