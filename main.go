@@ -30,8 +30,8 @@ var (
 	gogChapterPointer    = []uint32{0x01C6EFE0, 0x1dc, 0x128, 0x1b8, 0x3c, 0x528, 0x3cc}
 	gogCheckpointPointer = []uint32{0x01C6EFE0, 0x170, 0xbc, 0x0, 0x3c}
 
-	activeChapterPointer    = steamChapterPointer
-	activeCheckpointPointer = steamCheckpointPointer
+	activeChapterPointer    []uint32
+	activeCheckpointPointer []uint32
 )
 
 func main() {
@@ -118,7 +118,7 @@ func createGUI() (guiWindow, error) {
 
 	window := wui.NewWindow()
 	window.SetFont(windowFont)
-	window.SetInnerSize(350, 210)
+	window.SetInnerSize(350, 170)
 	window.SetTitle("Medge Key Counter")
 	window.SetResizable(true)
 	window.SetHasBorder(true)
@@ -138,61 +138,39 @@ func createGUI() (guiWindow, error) {
 	keyCountLabel.SetText(strconv.Itoa(keyCount))
 	window.Add(keyCountLabel)
 
-	buttonFont, _ := wui.NewFont(wui.FontDesc{
+	comboBoxFont, _ := wui.NewFont(wui.FontDesc{
 		Name:   "Inter",
 		Height: 20,
-		Bold:   true,
+		Bold:   false,
 	})
 
-	steamButton := wui.NewButton()
-	steamButton.SetFont(buttonFont)
-	steamButton.SetBounds(20, 120, 100, 30)
-	steamButton.SetText("steam")
-	steamButton.SetOnClick(func() {
-		activeChapterPointer = steamChapterPointer
-		activeCheckpointPointer = steamCheckpointPointer
+	versionComboBox := wui.NewComboBox()
+	versionComboBox.SetFont(comboBoxFont)
+	versionComboBox.SetBounds(20, 120, 250, 30)
+	versionComboBox.SetItems([]string{"select a game version", "steam", "origin", "reloaded", "gog"})
+	versionComboBox.SetSelectedIndex(0)
+	versionComboBox.SetOnChange(func(newIndex int) {
+		switch versionComboBox.Items()[newIndex] {
+		case "steam":
+			activeChapterPointer = []uint32{0x01BF8B20, 0x3cc}
+			activeCheckpointPointer = []uint32{0x01C55EA8, 0x74, 0x0, 0x3c}
+		case "origin":
+			activeChapterPointer = []uint32{0x01C11BE0, 0x3cc}
+			activeCheckpointPointer = []uint32{0x01C6EFE0, 0x134, 0xBC, 0x0, 0x3c}
+		case "reloaded":
+			activeChapterPointer = []uint32{0x01C6EFE0, 0x170, 0x1dc, 0x1e8, 0x3c, 0x528, 0x3cc}
+			activeCheckpointPointer = []uint32{0x01C6EFE0, 0x134, 0xbc, 0x0, 0x3c}
+		case "gog":
+			activeChapterPointer = []uint32{0x01C6EFE0, 0x1dc, 0x128, 0x1b8, 0x3c, 0x528, 0x3cc}
+			activeCheckpointPointer = []uint32{0x01C6EFE0, 0x170, 0xbc, 0x0, 0x3c}
+		}
 	})
-	window.Add(steamButton)
 
-	originButton := wui.NewButton()
-	originButton.SetFont(buttonFont)
-	originButton.SetBounds(125, 120, 100, 30)
-	originButton.SetText("origin")
-	originButton.SetOnClick(func() {
-		activeChapterPointer = originChapterPointer
-		activeCheckpointPointer = originCheckpointPointer
-	})
-	window.Add(originButton)
-
-	reloadedButton := wui.NewButton()
-	reloadedButton.SetFont(buttonFont)
-	reloadedButton.SetBounds(20, 160, 100, 30)
-	reloadedButton.SetText("reloaded")
-	reloadedButton.SetOnClick(func() {
-		activeChapterPointer = reloadedChapterPointer
-		activeCheckpointPointer = reloadedCheckpointPointer
-		log.Println("version set to reloaded")
-	})
-	window.Add(reloadedButton)
-
-	gogButton := wui.NewButton()
-	gogButton.SetFont(buttonFont)
-	gogButton.SetBounds(125, 160, 100, 30)
-	gogButton.SetText("gog")
-	gogButton.SetOnClick(func() {
-		activeChapterPointer = gogChapterPointer
-		activeCheckpointPointer = gogCheckpointPointer
-		log.Println("version set to gog")
-	})
-	window.Add(gogButton)
+	window.Add(versionComboBox)
 
 	gui := guiWindow{
 		window:   window,
 		keyCount: keyCountLabel,
-		steam:    steamButton,
-		origin:   originButton,
-		reloaded: reloadedButton,
-		gog:      gogButton,
 		done:     done,
 	}
 
@@ -254,6 +232,10 @@ func scanMedgeLoopWithError(gui guiWindow) error {
 			return fmt.Errorf("process exited with status: %d", exitStatus)
 		}
 
+		if len(activeChapterPointer) == 0 {
+			continue
+		}
+
 		// get current chapter
 		chapterAddr, err := lookupAddr(proc, activeChapterPointer[0]+0x400000, activeChapterPointer[1:]...)
 		if err != nil {
@@ -264,10 +246,6 @@ func scanMedgeLoopWithError(gui guiWindow) error {
 		currentChapter, err := findStringAtAddr(proc, chapterAddr)
 		if err != nil {
 			log.Println(err)
-			continue
-		}
-
-		if currentChapter == "TdMainMenu" {
 			continue
 		}
 
@@ -284,21 +262,25 @@ func scanMedgeLoopWithError(gui guiWindow) error {
 			continue
 		}
 
+		if currentChapter == "TdMainMenu" {
+			currentCheckpoint = "TdMainMenu"
+		}
+
 		if currentCheckpoint == lastCheckpoint {
 			continue
 		}
 
 		lastCheckpoint = currentCheckpoint
-
 		chapterCheckpoint := strings.ToLower(currentChapter + "_" + currentCheckpoint)
 
 		if chapterCheckpoint == "tutorial_p_start" {
 			keyCount = 0
 			gui.keyCount.SetText(strconv.Itoa(keyCount))
+			log.Println("new game detected - key count reset")
 			continue
 		}
 
-		log.Printf("%s", chapterCheckpoint)
+		// log.Printf("%s", chapterCheckpoint)
 	}
 }
 
@@ -348,11 +330,8 @@ func findStringAtAddr(proc kiwi.Process, initialAddr uint32) (string, error) {
 }
 
 type guiWindow struct {
-	window   *wui.Window
-	keyCount *wui.Label
-	steam    *wui.Button
-	origin   *wui.Button
-	reloaded *wui.Button
-	gog      *wui.Button
-	done     chan struct{}
+	window      *wui.Window
+	keyCount    *wui.Label
+	gameVersion *wui.ComboBox
+	done        chan struct{}
 }
